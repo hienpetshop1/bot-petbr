@@ -38,46 +38,90 @@ app.post("/webhook", async (req, res) => {
       const webhook_event = entry.messaging[0];
       const sender_psid = webhook_event.sender.id;
 
-      if (webhook_event.message && webhook_event.message.text) {
-        const userMessage = webhook_event.message.text;
-        console.log("💬 Tin nhắn khách:", userMessage);
+      if (webhook_event.message) {
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const noidung_txt = fs.readFileSync("noidung.txt", "utf8");
+
+        const textMessage = webhook_event.message.text || "";
+        const attachments = webhook_event.message.attachments || [];
+        const imageAttachment = attachments.find(att => att.type === "image");
 
         try {
-          const noidung_txt = fs.readFileSync("noidung.txt", "utf8");
+          let promptParts = [];
 
-          const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+          if (imageAttachment) {
+            const imageUrl = imageAttachment.payload.url;
+            const imageBuffer = await axios.get(imageUrl, { responseType: "arraybuffer" });
+            const base64Image = Buffer.from(imageBuffer.data, 'binary').toString('base64');
 
-          const prompt = \`
-Bạn đang đóng vai người bán hàng online của fanpage Lộc Pet Shop. Trả lời thật ngắn gọn (1 câu, tối đa 20 từ), thân thiện, giống chị bán hàng Facebook.
+            promptParts.push({
+              text: `Bạn là nhân viên bán hàng online của fanpage Lộc Pet Shop. Trả lời như đang chat Facebook: ngắn gọn, tự nhiên, thân thiện, đúng trọng tâm, không văn vở, không dùng "Chào bạn!" liên tục.
 
-🌟 Chọn 1 trong các mẫu nếu phù hợp:
-- Có bé Poodle nha bạn, giá tầm 2tr5 – 3tr5 🐶 dễ thương lắm!
-- Có nha, nhiều giống lắm, bạn muốn loại nào mình gửi giá liền!
-- Nhắn Zalo 0908 725270 giúp mình nha, gửi hình dễ nói hơn 💬
+❌ Không hỏi kiểu: “bạn cần gì”, “shop có nhiều loại”, “xem chó hay mèo”, “hình vậy là sao”. Nếu không chắc chắn thì bỏ qua, không suy đoán.
+✅ Nếu khách hỏi tư vấn cách chăm sóc chó/mèo, thì **trích nội dung quan trọng và tóm gọn đủ ý trong phần hướng dẫn chăm sóc** từ nội dung nội bộ (nếu có), không được nói chung chung.
+✅ Nếu khách gửi ảnh chó/mèo: đoán giống, tư vấn giá, size, màu sắc nếu rõ thông tin.
+✅ Nếu khách hỏi giá thì trả lời đúng theo thông tin.
+➡ Nếu khách xin hình/video: luôn trả lời đúng câu này: "Qua zalo: 0908 725270 xem giúp em, có chủ em gửi ảnh đẹp rõ nét liền ạ!"
+  
+🤝 Nếu không hiểu rõ ý khách, lịch sự nhờ khách làm rõ lại, ví dụ:
+"Khách nói giúp em rõ hơn với ạ, để em hỗ trợ chính xác nhất nha."
 
-❗ Nếu không biết câu nào phù hợp, trả lời:
-"Bạn nhắn Zalo 0908 725270 giúp mình nha!"
+⚡️ Luôn chú ý cảm xúc của khách: 
+- Nếu khách có vẻ vội, hãy trả lời thật nhanh.
+- Nếu khách thân thiện, hãy trả lời vui vẻ, thêm icon cảm xúc.
+- Nếu khách khó tính, trả lời thật rõ ràng, chuyên nghiệp. 
+Dưới đây là thông tin nội bộ cửa hàng:
+${noidung_txt}
 
----
-Thông tin nội bộ của shop:
+Lời nhắn khách: ${textMessage}`
+            });
 
-\${noidung_txt}
-Tin nhắn khách: \${userMessage}
-\`;
+            promptParts.push({
+              inlineData: {
+                mimeType: "image/jpeg",
+                data: base64Image
+              }
+            });
+          } else if (textMessage) {
+            promptParts.push({
+              text: `Bạn là nhân viên bán hàng online của fanpage Lộc Pet Shop. Trả lời như đang chat Facebook: ngắn gọn, tự nhiên, thân thiện, đúng trọng tâm, không văn vở, không dùng "Chào bạn!" liên tục.
 
-          const result = await model.generateContent(prompt);
-          const reply = result.response.text().trim();
+❌ Không hỏi kiểu: “bạn cần gì”, “shop có nhiều loại”, “xem chó hay mèo”, “hình vậy là sao”. Nếu không chắc chắn thì bỏ qua, không suy đoán.
+✅ Nếu khách hỏi tư vấn cách chăm sóc chó/mèo, thì **trích nội dung quan trọng và tóm gọn đủ ý trong phần hướng dẫn chăm sóc** từ nội dung nội bộ (nếu có), không được nói chung chung.
+✅ Nếu khách gửi ảnh chó/mèo: đoán giống, tư vấn giá, size, màu sắc nếu rõ thông tin.
+✅ Nếu khách hỏi giá thì trả lời đúng theo thông tin.
+➡ Nếu khách xin hình/video: luôn trả lời đúng câu này: "Qua zalo: 0908 725270 xem giúp em, có chủ em gửi ảnh đẹp rõ nét liền ạ!"
 
-          await axios.post(
-            \`https://graph.facebook.com/v18.0/me/messages?access_token=\${PAGE_ACCESS_TOKEN}\`,
-            {
-              recipient: { id: sender_psid },
-              messaging_type: "RESPONSE",
-              message: { text: reply || "Shop đang cập nhật, nhắn qua Zalo 0908 725270 nhé!" }
-            }
-          );
+🤝 Nếu không hiểu rõ ý khách, lịch sự nhờ khách làm rõ lại, ví dụ:
+"Khách nói giúp em rõ hơn với ạ, để em hỗ trợ chính xác nhất nha."
+
+⚡️ Luôn chú ý cảm xúc của khách: 
+- Nếu khách có vẻ vội, hãy trả lời thật nhanh.
+- Nếu khách thân thiện, hãy trả lời vui vẻ, thêm icon cảm xúc.
+- Nếu khách khó tính, trả lời thật rõ ràng, chuyên nghiệp. 
+Dưới đây là thông tin nội bộ cửa hàng:
+${noidung_txt}
+
+Lời nhắn khách: ${textMessage}`
+            });
+          }
+
+          if (promptParts.length > 0) {
+            const result = await model.generateContent({ contents: [{ parts: promptParts }] });
+            const reply = result.response.text().trim() || "Bạn cần tư vấn gì thêm? Gửi hình hoặc hỏi mình tư vấn nha!";
+
+            await axios.post(
+              `https://graph.facebook.com/v18.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
+              {
+                recipient: { id: sender_psid },
+                messaging_type: "RESPONSE",
+                message: { text: reply }
+              }
+            );
+          }
+
         } catch (error) {
-          console.error("❌ Lỗi phản hồi Gemini:", error.message || error);
+          console.error("❌ Lỗi xử lý Gemini:", error.message || error);
         }
       }
     }
@@ -88,5 +132,5 @@ Tin nhắn khách: \${userMessage}
 });
 
 app.listen(3000, () => {
-  console.log("🚀 Bot đang chạy tại http://localhost:3000 (Google Gemini)");
+  console.log("🚀 Bot đang chạy tại http://localhost:3000 (Gemini + Ảnh + Văn bản)");
 });
