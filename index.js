@@ -122,33 +122,52 @@ app.post("/webhook", async (req, res) => {
         }
       }
 
-      // 💬 Comment on posts
-      if (entry.changes) {
-        for (const change of entry.changes) {
-          const value = change.value;
+      const PAGE_ID = '1125511712717333'; // ✅ Page ID thật của bạn
 
-          // ✅ Thêm kiểm tra tránh trả lời comment của chính Page
-          if (change.field === "feed" && value.item === "comment" && value.message && value.from && value.from.id !== entry.id) {
-            const userComment = value.message;
-            const commentId = value.comment_id;
+...
 
-            try {
-              const geminiRes = await model.generateContent({
-                contents: [{ parts: [{ text: `Trả lời bình luận sau bằng tiếng Việt thân thiện, giống người thật: \"${userComment}\"` }] }]
-              });
+// 💬 Comment on posts
+if (entry.changes) {
+  for (const change of entry.changes) {
+    const value = change.value;
 
-              const reply = geminiRes.response.text().trim() || "Cảm ơn bạn đã bình luận ạ!";
+    // ✅ Kiểm tra đúng cách để tránh trả lời comment của chính Fanpage
+    if (
+      change.field === "feed" &&
+      value.item === "comment" &&
+      value.message &&
+      value.from &&
+      value.from.id !== PAGE_ID
+    ) {
+      console.log("📥 Nhận comment từ người khác:", value.message); // ✅ Ghi log để test
+      const userComment = value.message;
+      const commentId = value.comment_id;
 
-              await axios.post(
-                `https://graph.facebook.com/v19.0/${commentId}/comments`,
-                { message: reply, access_token: PAGE_ACCESS_TOKEN }
-              );
-            } catch (err) {
-              console.error("❌ Lỗi trả lời comment:", err.response?.data || err.message);
+      try {
+        const geminiRes = await model.generateContent({
+          contents: [
+            {
+              parts: [
+                {
+                  text: `Trả lời bình luận sau bằng tiếng Việt thân thiện, giống người thật: "${userComment}"`
+                }
+              ]
             }
-          }
-        }
+          ]
+        });
+
+        const reply = geminiRes.response.text().trim() || "Cảm ơn bạn đã bình luận ạ!";
+
+        await axios.post(
+          `https://graph.facebook.com/v19.0/${commentId}/comments`,
+          { message: reply, access_token: PAGE_ACCESS_TOKEN }
+        );
+      } catch (err) {
+        console.error("❌ Lỗi trả lời comment:", err.response?.data || err.message);
       }
+    }
+  }
+}
     }
     res.status(200).send("EVENT_RECEIVED");
   } else {
