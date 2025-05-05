@@ -13,7 +13,7 @@ app.use(bodyParser.json());
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const PAGE_ID = '1125511712717333'; // ✅ ID thật của Fanpage bạn
+const PAGE_ID = '109777333867290'; // ✅ ID thật của Fanpage bạn
 
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
