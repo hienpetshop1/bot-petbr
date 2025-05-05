@@ -124,8 +124,6 @@ app.post("/webhook", async (req, res) => {
 
       const PAGE_ID = '1125511712717333'; // ✅ Page ID thật của bạn
 
-...
-
 // 💬 Comment on posts
 if (entry.changes) {
   for (const change of entry.changes) {
