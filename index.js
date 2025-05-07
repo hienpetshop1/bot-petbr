@@ -1,11 +1,13 @@
-// ✅ Bot Facebook + Gemini + Ghi log rõ ràng
+// ✅ Bot Facebook + Gemini + Cloudinary + Auto Post 4 bài/ngày (6h15, 11h15, 17h30, 20h30)
 const express = require("express");
 const axios = require("axios");
 const bodyParser = require("body-parser");
 const fs = require("fs");
 const path = require("path");
+const cron = require("node-cron");
 require("dotenv").config();
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const cloudinary = require("cloudinary").v2;
 
 const app = express();
 app.use(bodyParser.json());
@@ -15,16 +17,23 @@ const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const PAGE_ID = process.env.PAGE_ID;
 
-const repliedFile = path.join(__dirname, "replied.json");
-let repliedCommentIds = new Set();
+cloudinary.config({
+  cloud_name: process.env.CLOUD_NAME,
+  api_key: process.env.CLOUD_API_KEY,
+  api_secret: process.env.CLOUD_API_SECRET,
+});
 
-if (fs.existsSync(repliedFile)) {
-  try {
-    const saved = JSON.parse(fs.readFileSync(repliedFile, "utf8"));
-    if (Array.isArray(saved)) repliedCommentIds = new Set(saved);
-  } catch (err) {
-    console.error("❌ Lỗi đọc replied.json:", err.message);
-  }
+const repliedFile = path.join(__dirname, "replied.json");
+if (!fs.existsSync(repliedFile)) {
+  fs.writeFileSync(repliedFile, "[]", "utf8");
+}
+
+let repliedCommentIds = new Set();
+try {
+  const saved = JSON.parse(fs.readFileSync(repliedFile, "utf8"));
+  if (Array.isArray(saved)) repliedCommentIds = new Set(saved);
+} catch (err) {
+  console.error("❌ Lỗi đọc replied.json:", err.message);
 }
 
 function saveRepliedIds() {
@@ -62,8 +71,7 @@ app.post("/webhook", async (req, res) => {
 
   if (body.object === "page") {
     for (const entry of body.entry) {
-      // ✅ Xử lý inbox
-      if (entry.messaging) {
+      if (entry.messaging && entry.messaging.length > 0) {
         const webhook_event = entry.messaging[0];
         const sender_psid = webhook_event.sender.id;
 
@@ -79,11 +87,11 @@ app.post("/webhook", async (req, res) => {
 ✅ Nếu khách gửi ảnh chó/mèo: đoán giống, tư vấn giá, size, màu sắc nếu rõ thông tin.
 ✅ Nếu khách hỏi giá thì trả lời đúng theo thông tin.
 ➡ Nếu khách xin hình/video: luôn trả lời đúng câu này: \"Qua zalo: 0908 725270 xem giúp em, có chủ em gửi ảnh đẹp rõ nét liền ạ!\"
-  
+
 🤝 Nếu không hiểu rõ ý khách, lịch sự nhờ khách làm rõ lại, ví dụ:
 \"Khách nói giúp em rõ hơn với ạ, để em hỗ trợ chính xác nhất nha.\"
 
-⚡️ Luôn chú ý cảm xúc của khách: 
+⚡️ Luôn chú ý cảm xúc của khách:
 - Nếu khách có vẻ vội, hãy trả lời thật nhanh.
 - Nếu khách thân thiện, hãy trả lời vui vẻ, thêm icon cảm xúc.
 - Nếu khách khó tính, trả lời thật rõ ràng, chuyên nghiệp.`;
@@ -99,14 +107,11 @@ app.post("/webhook", async (req, res) => {
             });
 
             const reply = result.response.text().trim();
-            await axios.post(
-              `https://graph.facebook.com/v18.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
-              {
-                recipient: { id: sender_psid },
-                messaging_type: "RESPONSE",
-                message: { text: reply || "Mình nhận được rồi nha!" },
-              }
-            );
+            await axios.post(`https://graph.facebook.com/v18.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`, {
+              recipient: { id: sender_psid },
+              messaging_type: "RESPONSE",
+              message: { text: reply || "Mình nhận được rồi nha!" },
+            });
             console.log("✅ Đã trả lời inbox thành công!");
           } catch (err) {
             console.error("❌ Lỗi trả lời inbox:", err.message);
@@ -114,7 +119,6 @@ app.post("/webhook", async (req, res) => {
         }
       }
 
-      // ✅ Xử lý comment
       if (entry.changes) {
         for (const change of entry.changes) {
           const value = change.value;
@@ -144,12 +148,11 @@ app.post("/webhook", async (req, res) => {
               });
 
               const reply = result.response.text().trim();
-              const resApi = await axios.post(
-                `https://graph.facebook.com/v19.0/${commentId}/comments`,
-                { message: reply, access_token: PAGE_ACCESS_TOKEN }
-              );
-
-              repliedCommentIds.add(resApi.data.id);
+              await axios.post(`https://graph.facebook.com/v19.0/${commentId}/comments`, {
+                message: reply,
+                access_token: PAGE_ACCESS_TOKEN,
+              });
+              repliedCommentIds.add(commentId);
               saveRepliedIds();
               console.log("✅ Đã trả lời comment thành công!");
             } catch (err) {
@@ -165,7 +168,141 @@ app.post("/webhook", async (req, res) => {
   }
 });
 
+function getTodayFolder(buoi) {
+  const now = new Date();
+  now.setHours(now.getHours() + 7);
+  const dd = String(now.getDate()).padStart(2, "0");
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const yyyy = now.getFullYear();
+  return `ngay-${dd}-${mm}-${yyyy}/${buoi}`;
+}
+
+async function getImageUrls(folderName) {
+  try {
+    const res = await cloudinary.search
+      .expression(`folder:${folderName} AND resource_type:image`)
+      .sort_by("public_id", "asc")
+      .max_results(10)
+      .execute();
+    return res.resources.map(file => file.secure_url);
+  } catch (err) {
+    console.error("❌ Lỗi lấy ảnh:", err.message);
+    return [];
+  }
+}
+
+async function getVideoUrl(folderName) {
+  try {
+    const res = await cloudinary.search
+      .expression(`folder:${folderName} AND resource_type:video`)
+      .sort_by("public_id", "asc")
+      .max_results(1)
+      .execute();
+    return res.resources[0]?.secure_url || null;
+  } catch (err) {
+    console.error("❌ Lỗi lấy video:", err.message);
+    return null;
+  }
+}
+
+async function genCaption(buoi) {
+  const prompt = `Viết caption đăng Facebook thú cưng buổi ${buoi}, không nói rõ mua bán, nhưng để người xem biết đây là fanpage chia sẻ và hỗ trợ tìm bạn đồng hành dễ thương để nuôi. Viết tự nhiên, ngắn gọn, nhiều cảm xúc, có icon.`;
+  const result = await model.generateContent({
+    contents: [
+      {
+        parts: [ { text: prompt } ]
+      }
+    ]
+  });
+  return result.response.text().trim();
+}
+
+async function postAlbumWithPhotos(imageUrls, caption) {
+  try {
+    const uploaded = await Promise.all(
+      imageUrls.map(url =>
+        axios.post(`https://graph.facebook.com/${PAGE_ID}/photos`, {
+          url,
+          published: false,
+          access_token: PAGE_ACCESS_TOKEN,
+        }).then(res => res.data.id)
+      )
+    );
+    await axios.post(`https://graph.facebook.com/${PAGE_ID}/feed`, {
+      message: caption,
+      attached_media: uploaded.map(id => ({ media_fbid: id })),
+      access_token: PAGE_ACCESS_TOKEN,
+    });
+    console.log("✅ Đăng album ảnh thành công!");
+  } catch (err) {
+    console.error("❌ Lỗi đăng album ảnh:", err.response?.data || err.message);
+  }
+}
+
+async function postVideo(videoUrl, caption) {
+  try {
+    await axios.post(`https://graph.facebook.com/${PAGE_ID}/videos`, {
+      file_url: videoUrl,
+      description: caption,
+      access_token: PAGE_ACCESS_TOKEN,
+    });
+    console.log("✅ Đăng video thành công!");
+  } catch (err) {
+    console.error("❌ Lỗi đăng video:", err.response?.data || err.message);
+  }
+}
+
+cron.schedule("15 23 * * *", async () => {
+  const folder = getTodayFolder("sang");
+  const images = await getImageUrls(folder);
+  const first4 = images.slice(0, 4);
+  if (first4.length === 4) {
+    const caption = await genCaption("\$1");
+  console.log("📢 Caption \"\$1\":", caption);
+    await postAlbumWithPhotos(first4, caption);
+  } else {
+    console.warn("⚠️ Không đủ ảnh sáng để đăng!");
+  }
+});
+
+cron.schedule("15 4 * * *", async () => {
+  const folder = getTodayFolder("trua");
+  const videoUrl = await getVideoUrl(folder);
+  if (videoUrl) {
+    const caption = await genCaption("\$1");
+  console.log("📢 Caption \"\$1\":", caption);
+    await postVideo(videoUrl, caption);
+  } else {
+    console.warn("⚠️ Không tìm thấy video để đăng trưa!");
+  }
+});
+
+cron.schedule("30 10 * * *", async () => {
+  const folder = getTodayFolder("chieu");
+  const images = await getImageUrls(folder);
+  const first4 = images.slice(0, 4);
+  if (first4.length === 4) {
+    const caption = await genCaption("\$1");
+  console.log("📢 Caption \"\$1\":", caption);
+    await postAlbumWithPhotos(first4, caption);
+  } else {
+    console.warn("⚠️ Không đủ ảnh chiều để đăng!");
+  }
+});
+
+cron.schedule("30 13 * * *", async () => {
+  const folder = getTodayFolder("toi");
+  const videoUrl = await getVideoUrl(folder);
+  if (videoUrl) {
+    const caption = await genCaption("\$1");
+  console.log("📢 Caption \"\$1\":", caption);
+    await postVideo(videoUrl, caption);
+  } else {
+    console.warn("⚠️ Không tìm thấy video để đăng tối!");
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 Bot đang chạy tại cổng ${PORT} (Gemini + Messenger + Comment)`);
+  console.log(`🚀 Bot đang chạy tại cổng ${PORT} (Gemini + Messenger + Comment + AutoPost)`);
 });
