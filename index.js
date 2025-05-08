@@ -16,6 +16,8 @@ app.get("/ping", (req, res) => {
   res.send("✅ Bot đang thức - ping thành công!");
 });
 
+// phần còn lại giữ nguyên ...
+
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
@@ -212,11 +214,11 @@ async function getVideoUrl(folderName) {
 async function genCaption(buoi) {
   const prompt = `Viết caption Facebook buổi ${buoi} cho fanpage thú cưng. 
 ❤️Viết kiểu như người nuôi thú thật sự, hài hước nhẹ nhàng, không nhắc trực tiếp tới "bán", "mua", "giá". 
-Nội dung phải khiến người đọc cảm nhận rõ là các bé thú cưng này đang sẵn sàng tìm nhà mới để được yêu thương. 
-Viết tối đa 3 câu, ngắn gọn, hết câu xuống dòng.
+❤️Nội dung phải khiến người đọc cảm nhận rõ là các bé thú cưng này đang sẵn sàng tìm nhà mới để được yêu thương. 
+❤️Viết tối đa 3 câu, ngắn gọn, hết câu xuống dòng.
 ❤️Đầu dòng có icon thú vị như 🐶, 😺, ❤️, ✨, 🏡, 💌... 
 ❤️Phong cách đời thường, gần gũi như đang kể chuyện với bạn bè.`;
-  
+
   const result = await model.generateContent({
     contents: [
       {
@@ -262,7 +264,7 @@ async function postVideo(videoUrl, caption) {
   }
 }
 
-cron.schedule("35 6 * * *", async () => {
+cron.schedule("15 22 * * *", async () => {
   const folder = getTodayFolder("sang");
   const images = await getImageUrls(folder);
   const first4 = images.slice(0, 4);
@@ -275,7 +277,7 @@ console.log("📢 Caption sáng:", caption);
   }
 });
 
-cron.schedule("45 7 * * *", async () => {
+cron.schedule("15 5 * * *", async () => {
   const folder = getTodayFolder("trua");
   const videoUrl = await getVideoUrl(folder);
   if (videoUrl) {
@@ -287,7 +289,7 @@ console.log("📢 Caption trưa:", caption);
   }
 });
 
-cron.schedule("30 10 * * *", async () => {
+cron.schedule("30 11 * * *", async () => {
   const folder = getTodayFolder("chieu");
   const images = await getImageUrls(folder);
   const first4 = images.slice(0, 4);
@@ -300,7 +302,7 @@ console.log("📢 Caption chiều:", caption);
   }
 });
 
-cron.schedule("30 12 * * *", async () => {
+cron.schedule("5 14 * * *", async () => {
   const folder = getTodayFolder("toi");
   const videoUrl = await getVideoUrl(folder);
   if (videoUrl) {
