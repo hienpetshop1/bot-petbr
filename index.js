@@ -269,7 +269,7 @@ console.log("📢 Caption sáng:", caption);
   }
 });
 
-cron.schedule("30 8 * * *", async () => {
+cron.schedule("45 7 * * *", async () => {
   const folder = getTodayFolder("trua");
   const videoUrl = await getVideoUrl(folder);
   if (videoUrl) {
