@@ -229,8 +229,6 @@ Ví dụ phong cách đúng:
 🐾 Chắc đang lên kế hoạch cho cuộc khám phá ngày mới đó!  
 😄 Bé ngoan quá trời luôn á!`;
 
-Viết theo phong cách đó.
-
   const result = await model.generateContent({
     contents: [
       {
