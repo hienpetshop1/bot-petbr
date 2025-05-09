@@ -227,7 +227,7 @@ async function genCaption(buoi) {
 Ví dụ phong cách đúng:  
 ☀️ Sáng nay bé Mỡ dậy từ 5h, nằm ngó trời ngó đất như đang suy nghĩ chuyện lớn.  
 🐾 Chắc đang lên kế hoạch cho cuộc khám phá ngày mới đó!  
-😄 Bé ngoan quá trời luôn á!
+😄 Bé ngoan quá trời luôn á!`;
 
 Viết theo phong cách đó.
 
